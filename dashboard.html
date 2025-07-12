@@ -1,0 +1,169 @@
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.42.3/dist/umd/supabase.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="" href="icons_logos/BonBuddy_Favicon.ico" />
+  <style>
+    body {
+      font-family: 'Jost', sans-serif;
+    }
+    nav ul li a {
+      position: relative;
+    }
+    nav ul li a:hover::after {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 0;
+      width: 100%;
+      height: 6px;
+      background-color: rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="dashboard" id="dashboard">
+    <div style="display: flex; width: 100vw;">
+      <nav style="width: 260px; background-color: #519e8a; color: white; padding: 30px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1000;">
+        <div>
+          <img src="icons_logos/BonBuddy_Partner.png" alt="BonBuddy Partnerportal" style="max-width: 200px; height: auto; margin-bottom: 30px; background: none; display: block;" />
+          <ul style="list-style: none; padding-left: 0;">
+            <li style="margin-bottom: 24px;">
+              <a href="dashboard.html" style="color: white; text-decoration: none;">Dashboard</a>
+            </li>
+            <li style="margin-bottom: 24px;">
+              <a href="produkte.html" style="color: white; text-decoration: none;">Produkte</a>
+            </li>
+            <li style="margin-bottom: 24px;">
+              <a href="#" style="color: white; text-decoration: none;">Statistiken</a>
+            </li>
+            <li style="margin-bottom: 24px;">
+              <a href="profil.html" style="color: white; text-decoration: none;">Profil</a>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <a href="#" id="logoutLink" style="color: white; text-decoration: none; font-size: 15px;">Logout</a>
+        </div>
+      </nav>
+      <main style="flex-grow: 1; background: #f4f4f4; display: flex; flex-direction: column; padding: 40px; gap: 40px; margin-left: 260px;">
+        <div style="display: flex; gap: 40px;">
+          <div style="background: #eee; padding: 30px 40px; border-radius: 40px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); text-align: center; height: 160px;">
+            <h2 style="margin: 0; font-size: 48px;"> <span id="aufrufeAnzahl">123</span> </h2>
+            <p style="margin: 0; font-size: 20px;">Aufrufe</p>
+          </div>
+          <div style="background: #eee; padding: 30px 40px; border-radius: 40px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); text-align: center; height: 160px;">
+            <h2 style="margin: 0; font-size: 48px;"> <span id="produktAnzahl">...</span> </h2>
+            <p style="margin: 0; font-size: 20px;">Produkte</p>
+          </div>
+          <div style="background: #fff; padding: 20px 30px; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); flex: 1;">
+            <h3 style="margin-top: 0; margin-bottom: 20px;">Aufrufe (letzte 7 Tage)</h3>
+            <canvas id="aufrufeChart" width="400" height="200"></canvas>
+          </div>
+        </div>
+        <div style="margin-top: 40px; width: 100%;">
+          <h3 style="margin-bottom: 20px;">Top 5 Produkte</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background-color: #519e8a; color: white;">
+                <th style="padding: 12px; text-align: left;">Name</th>
+                <th style="padding: 12px; text-align: left;">GTIN</th>
+                <th style="padding: 12px; text-align: left;">Preis</th>
+              </tr>
+            </thead>
+            <tbody id="topProdukteBody" style="background: white;">
+              <!-- Dynamisch befüllt -->
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    window.onload = () => {
+      const supabaseUrl = 'https://hqxesetgdjmzhktlmayv.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxeGVzZXRnZGptemhrdGxtYXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyNDcxMjUsImV4cCI6MjA2NzgyMzEyNX0.PVo7oMtJLBRu-3NA8t6IEgiTak4XJ5vPunnL8VHSYH8';
+      const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+      async function checkSession() {
+        const { data, error } = await supabase.auth.getSession();
+        if (!data.session) {
+          window.location.href = 'login.html';
+        } else {
+          document.getElementById('dashboard').style.display = 'block';
+          const { data: userData } = await supabase.auth.getUser();
+          const { count, error: countError } = await supabase
+            .from('produkte')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userData.user.id);
+
+          if (countError) {
+            console.error('Fehler beim Abrufen der Produktanzahl:', countError.message);
+          } else {
+            document.getElementById('produktAnzahl').textContent = count;
+          }
+
+          const ctx = document.getElementById('aufrufeChart').getContext('2d');
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+              datasets: [{
+                label: 'Aufrufe',
+                data: [12, 19, 14, 23, 17, 20, 25],
+                fill: false,
+                borderColor: '#519e8a',
+                tension: 0.4
+              }]
+            },
+            options: {
+              responsive: true,
+              scales: {
+                y: {
+                  beginAtZero: true
+                }
+              }
+            }
+          });
+
+          const { data: topProdukte, error: topError } = await supabase
+            .from('produkte')
+            .select('*')
+            .eq('user_id', userData.user.id)
+            .limit(5);
+
+          if (topError) {
+            console.error('Fehler beim Laden der Top-Produkte:', topError.message);
+          } else {
+            const tbody = document.getElementById('topProdukteBody');
+            topProdukte.forEach(produkt => {
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                <td style="padding: 12px;">${produkt.name}</td>
+                <td style="padding: 12px;">${produkt.gtin}</td>
+                <td style="padding: 12px;">${produkt.preis}</td>
+              `;
+              tbody.appendChild(row);
+            });
+          }
+        }
+      }
+
+      async function logout() {
+        await supabase.auth.signOut();
+        window.location.href = 'login.html';
+      }
+
+      // Logout-Funktion global verfügbar machen
+      window.logout = logout;
+
+      checkSession();
+      document.getElementById('logoutLink').addEventListener('click', function (e) {
+        e.preventDefault();
+        logout();
+      });
+    };
+  </script>
+</body>
